@@ -1,73 +1,68 @@
-// 最小 canvas 渲染器：把 apply.js 的网格画到 canvas。
+// 端口（port）：JS 侧 `Renderer` 接口 + 显式 factory。
 //
-// 职责边界（SPEC §1/§2）：core 只报「哪些格子变了」，渲染（像素）是这里的事。
-// 这里做两件事：全量重绘（Cell + 光标），和滚动 blit（canvas 整块拷贝 + 只重画新空行）。
-// 颜色编码 → CSS 颜色见 palette.js。
+// SPEC §10（决策 #13/#14/#16）锁定：
+//   - 端口在 JS 侧，不是 Rust trait——Rust 侧 trait 会把 draw 调用推过 WASM 边界、
+//     把核心耦到渲染抽象。数据端口（Change 流）已经存在，端口 = 它的消费者侧接口。
+//   - 共享网格模型是 apply.js（唯一权威状态）；每个 adapter 只读它、只自管绘制资源，
+//     不复刻网格副本。
+//   - grid 即共享表示，不引入中间 scene/几何层（不采用 d3gl 式设计）。
+//
+// 每个 adapter 必须实现这个形状（SPEC §10 的接口，无运行时类型，靠约定 + 本注释锁定）：
+//
+//   render(grid, cursor)
+//     全量重绘（init / reset / 有内容变更时）。grid 是 apply.js 的网格
+//     （Cell = { ch, width, fg, bg, attrs }），cursor 是 { row, col, hidden } | null。
+//
+//   blitScroll(dir, top, bottom, count, grid, cursor)
+//     纯滚动快路径。调用时机：一次 feed() 只产生 scroll_up/scroll_down、
+//     没有 cell/clear/reset（见 session.js 的判定）。grid 已经是滚动后的状态。
+//       dir: 'up'   = 内容上移（对应 change tag 'scroll_up'，底部补 count 空白行）
+//       dir: 'down' = 内容下移（对应 change tag 'scroll_down'，顶部补 count 空白行）
+//       [top, bottom] 是滚动边距（含端点），count 是滚的行数。
+//
+//   resize?(cols, rows)
+//     可选：几何变化。canvas/DOM 要重建绘制资源，text 要重置列数。
+//
+// retained vs immediate（SPEC §10）：DOM 是 retained（内部 diff 决定改哪些节点），
+// canvas/WebGL/WebGPU 是 immediate（整帧/blit）。所以接口只暴露「渲染这个网格状态」，
+// 不暴露逐格 drawCell——DOM adapter 内部自己 diff。
+//
+// 硬约束：adapter 显式声明、一次只装一个；factory 遇未知 backend 直接 throw，
+// 禁止像 xterm.js 那样悄悄 fallback 到 DOM renderer（WebGL 失败会被 DOM 掩盖，问题查不到）。
 
-import { colorOf } from './palette.js';
+import { createCanvasRenderer } from './canvas-renderer.js';
+import { createDOMRenderer } from './dom-renderer.js';
+import { createTextRenderer } from './text-renderer.js';
+import { createWebGLRenderer } from './webgl-renderer.js';
+import { createWebGPURenderer } from './webgpu-renderer.js';
 
-const CW = 10; // 每格宽（px）
-const CH = 20; // 每格高（px）
+/** 可选 backend（与 SPEC §10 适配器清单对齐；webgl/webgpu 是 v2 接口桩）。 */
+export const BACKENDS = ['canvas', 'dom', 'text', 'webgl', 'webgpu'];
 
-export function createRenderer(canvas, cols, rows) {
-  const ctx = canvas.getContext('2d');
-  canvas.width = cols * CW;
-  canvas.height = rows * CH;
-  ctx.font = '16px monospace';
-  ctx.textBaseline = 'top';
-
-  function drawCell(c, r, cell) {
-    const x = c * CW;
-    const y = r * CH;
-    ctx.fillStyle = colorOf(cell.bg);
-    ctx.fillRect(x, y, CW, CH);
-    if (cell.width !== 0 && cell.ch !== ' ') {
-      ctx.fillStyle = colorOf(cell.fg);
-      ctx.fillText(cell.ch, x, y + 2);
-    }
+/**
+ * 显式 dispatch：按 backend 选一个 adapter。未知 backend → throw（不做隐式 fallback）。
+ *
+ * @param {'canvas'|'dom'|'text'|'webgl'|'webgpu'} backend
+ * @param {{canvas?: HTMLCanvasElement, host?: HTMLElement, cols?: number, rows?: number}} [opts]
+ *   - canvas / webgl / webgpu 需要 `opts.canvas`
+ *   - dom 需要 `opts.host`（挂载行 div 的容器）
+ *   - text 不需要元素（纯字符串）
+ */
+export function createRenderer(backend, opts = {}) {
+  switch (backend) {
+    case 'canvas':
+      return createCanvasRenderer(opts.canvas, opts.cols, opts.rows);
+    case 'dom':
+      return createDOMRenderer(opts.host, opts.cols, opts.rows);
+    case 'text':
+      return createTextRenderer(opts.cols, opts.rows);
+    case 'webgl':
+      return createWebGLRenderer(opts.canvas, opts.cols, opts.rows);
+    case 'webgpu':
+      return createWebGPURenderer(opts.canvas, opts.cols, opts.rows);
+    default:
+      throw new Error(
+        `未知 renderer: "${backend}"（可选 ${BACKENDS.join('|')}）。adapter 显式声明、不做隐式 fallback。`
+      );
   }
-
-  function drawRow(r, row) {
-    ctx.fillStyle = colorOf(row[0].bg); // 先清背景
-    ctx.fillRect(0, r * CH, cols * CW, CH);
-    for (let c = 0; c < cols; c++) drawCell(c, r, row[c]);
-  }
-
-  function drawCursor(cursor) {
-    if (!cursor || cursor.hidden) return;
-    ctx.fillStyle = '#c0c0c0';
-    ctx.fillRect(cursor.col * CW, cursor.row * CH, CW, CH);
-  }
-
-  // 全量重绘：清屏 + 逐格画 + 光标。
-  function render(grid, cursor) {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    for (let r = 0; r < rows; r++) drawRow(r, grid[r]);
-    drawCursor(cursor);
-  }
-
-  // 滚动 blit：canvas 整块拷贝 [top,bottom] 区域，再重画新滚入的空白行 + 光标。
-  // 依赖画布仍是滚动前的旧帧，所以调用方要在 applyChanges 之后、下一次 render 之前
-  // 调它（见 main.js）。保留行数为 0 时退回全量重绘。
-  function blitScroll(dir, top, bottom, count, grid, cursor) {
-    const kept = bottom - top + 1 - count;
-    if (kept <= 0) {
-      render(grid, cursor);
-      return;
-    }
-    const keptH = kept * CH;
-    if (dir === 'scroll_up') {
-      // [top+count .. bottom] 上移到 [top .. bottom-count]。
-      ctx.drawImage(canvas, 0, (top + count) * CH, canvas.width, keptH, 0, top * CH, canvas.width, keptH);
-      for (let r = bottom - count + 1; r <= bottom; r++) drawRow(r, grid[r]);
-    } else {
-      // [top .. bottom-count] 下移到 [top+count .. bottom]。
-      ctx.drawImage(canvas, 0, top * CH, canvas.width, keptH, 0, (top + count) * CH, canvas.width, keptH);
-      for (let r = top; r < top + count; r++) drawRow(r, grid[r]);
-    }
-    drawCursor(cursor);
-  }
-
-  return { render, blitScroll };
 }
