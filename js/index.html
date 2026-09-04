@@ -6,17 +6,23 @@
   <title>decode-wasm demo</title>
   <style>
     body { background: #111; color: #ccc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 1rem; }
-    canvas { border: 1px solid #333; background: #000; }
+    #screen { border: 1px solid #333; background: #000; min-height: 1rem; }
+    canvas { background: #000; }
+    .dom-screen { color: #c0c0c0; line-height: 1.2; }
+    .text-screen { background: #000; color: #c0c0c0; padding: 0.25rem; overflow: auto; }
     .hint { font-size: 0.85rem; color: #888; margin-top: 0.75rem; max-width: 620px; }
     input { margin-top: 0.5rem; background: #222; color: #ccc; border: 1px solid #444; padding: 0.25rem 0.5rem; font-family: inherit; }
+    #result { margin-top: 0.75rem; padding: 0.5rem; background: #0a0a0a; border: 1px solid #333; color: #9f9; white-space: pre; }
   </style>
 </head>
 <body>
-  <canvas id="screen"></canvas>
+  <div id="screen"></div>
   <div class="hint">
     上面是 <code>vim</code> 打开一个 3 行 Rust 文件后的屏幕，经 decode-wasm 核心
-    （Rust → WASM）解析字节流、产出 change diff，再由这个 canvas 渲染器画出来。
-    点击下方输入框可直接打字，把按键作为字节喂回终端（vim 里 <kbd>x</kbd> 会删除光标处字符）。
+    （Rust → WASM）解析字节流、产出 change diff，再由选定 renderer 画出来。
+    URL query 可切后端与负载：<code>?renderer=canvas|dom|text</code>、
+    <code>?bench=throughput|latency|scroll</code>、<code>?perf=1</code>、
+    <code>?cols=&amp;rows=</code>。点击下方输入框可直接打字，把按键作为字节喂回终端。
   </div>
   <input id="input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
   <script type="module" src="./main.js"></script>
