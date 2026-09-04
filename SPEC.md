@@ -25,7 +25,7 @@ decode_wasm 是一个 **Rust → WASM 的终端仿真器核心库**，负责六�
 
 **非目标（out of scope）：**
 
-- 渲染器（Canvas/WebGL）——「等图形学懂了」那个项目。
+- 渲染器（Canvas/WebGL）**本体**——「等图形学懂了」那个项目。（「核心 ↔ 渲染器」之间的**端口 + adapter 层**进 scope，见 §10。）
 - Warp block-list 虚拟化滚动——渲染层/视图层的事。
 - 「丝滑滚动」blit——渲染器的事；核心只交付「只报变更」的 diff 前提。
 - PTY/进程 spawn——核心是字节流进，不含取字节。
@@ -117,6 +117,10 @@ pub enum Change {
 | 10 | 区域滚动 | 进 v1（DECSTBM） |
 | 11 | 格子粒度 | 单码点 + width |
 | 12 | 零分配路径 | v2 |
+| 13 | 端口位置 | JS 侧 `Renderer` 接口（非 Rust trait） |
+| 14 | adapter 形态 | 每 renderer 一个适配器，共享 grid-model |
+| 15 | 性能采样 | 三轴：吞吐 / 延迟 / 帧时间；bench 用启动命令区分 |
+| 16 | 中间表示 | grid 即共享表示，不引入额外 scene/几何层（不采用 d3gl 式） |
 
 ## 7. MVP 范围（v1 Handler 实现的序列清单）
 
@@ -156,3 +160,84 @@ decode_wasm/
 │   └── decode-wasm/     (wasm-bindgen 前端，导出给 JS)
 └── js/                  (最小 canvas 渲染器 demo，后续)
 ```
+
+## 10. adapter 层（端口与适配器）
+
+渲染器本体仍 out of scope（§2），但「核心 ↔ 渲染器」之间那条缝进 scope：**一个稳定端口 + 每个 renderer 一个适配器**。依赖方向锁定为 `renderer → 端口 → core`，绝不反向——这就是「渲染无关」从口号变成工程约束。
+
+### 端口：JS 侧的 `Renderer` 接口
+
+核心继续只吐 `Box<[Change]>`，Rust 一行不动。端口是消费者侧的一个接口，把现在 `renderer.js` 的方法显式化：
+
+```ts
+interface Renderer {
+  render(grid: Grid, cursor: Cursor | null): void;                    // 全量重绘（init/reset）
+  blitScroll(dir: 'up'|'down', top: number, bottom: number,
+             count: number, grid: Grid, cursor: Cursor | null): void; // 纯滚动快路径
+  resize?(cols: number, rows: number): void;                          // 可选
+}
+```
+
+关键约束（就是这一层的决策）：
+
+- **端口在 JS 侧，不是 Rust `trait Renderer`**。Rust 侧 trait 会把 draw 调用推过 WASM 边界、把核心耦到渲染抽象，破坏「渲染无关」。数据端口（Change 流）已经存在，端口 = 它的消费者侧接口。
+- **共享网格模型** `grid-model`（现在的 `apply.js`）是唯一权威状态；每个 adapter 只读它、只自管绘制资源，**不复刻网格副本**。
+- **retained vs immediate**：DOM 是 retained（增量改节点），canvas/WebGL/WebGPU 是 immediate（整帧/blit）。所以 `Renderer` 只暴露「渲染这个网格状态」，不暴露「逐格 drawCell」——DOM adapter 内部自己 diff 决定改哪些节点。
+- **不许隐式回退**：adapter 显式声明、一次只装一个；禁止像 xterm.js 那样悄悄 fallback 到 DOM renderer（WebGL 失败会被 DOM 掩盖，问题查不到）。
+
+### 适配器清单（v1）
+
+- `CanvasRenderer`——现有 `renderer.js` 抽成实现（像素）。
+- `DOMRenderer`——一行一个 `<div>`，增量改 `textContent`/`style`（元素，最简单、最易维护）。
+- `TextRenderer`——把网格渲成 ANSI 字符串（纯文本，用于断言 / 导出 / SSH）。
+- `WebGLRenderer` / `WebGPURenderer`——纹理图集 + instanced quad（v2，为丝滑滚动铺路）。
+
+渲染后端性能序（社区共识，供选型参考）：**WebGL > Canvas > SVG ≥ DOM**；代价序相反：DOM 实现最便宜、WebGL 最贵（xterm.js 就因 canvas/WebGL 维护成本高而贡献者少）。所以 v1 先落 canvas/DOM/text 三条「便宜且能证明端口通用」的线，WebGL/WebGPU 只留接口。
+
+### 参考项目与取舍
+
+| 项目 | 借鉴点 |
+|---|---|
+| xterm.js | `IRenderer` + Dom/Canvas/WebGL 可选 addon；脏行追踪（`RenderService`） |
+| ratatui | `Backend` trait + crossterm/termion/termwiz 三 adapter（push 原语粒度） |
+| wezterm | `front_end` 配置选前端（Software / WebGpu / OpenGL），GPU 不可用自动回退 |
+| beamterm | WebGL2 单次 instanced draw、45k 格 <1ms（WebGL adapter 参考实现） |
+| d3gl | **不采用**（见下） |
+
+**不采用 d3gl 式设计**：d3gl 把数据先投影/细分成一个 backend 无关的中间 Scene，再让各 backend 渲染它。我们不需要这层中间抽象——`grid-model`（权威网格）本身就是那个「建一次的共享表示」，每个 renderer 直接读它；再往上叠一层 scene 是纯冗余。
+
+**v2 展望**：端口粒度从「整网格 `render(grid)` + `blitScroll`」升级为**脏行追踪**（只重画变化的行），对标 xterm.js 的 `RenderService`。
+
+## 11. 性能采样 harness
+
+目标：同一份字节流，分别量化「核心解析」与「渲染」两条链，且不同 renderer 可横向对比。
+
+### 采样指标（对齐社区方法）
+
+社区把终端性能拆成三条轴（kitty docs：能耗 / 键到屏延迟 / 吞吐），我们采样三组：
+
+1. **吞吐（core parse）**：`feed()` 处理速度（MB/s）。喂一大段字节（`seq` 输出或 vim 启动流放大 N 倍）测 wall time。注意 kitty `--render` 的语义：**不渲染 = 纯 parser 速度**，我们分两档测。
+2. **延迟（feed）**：单次 `feed()` 的 p50/p95/p99（µs），用 `performance.now()` 包住 `core.feed()`。参考：Alacritty Typometer 4.2ms、xterm 3.5ms（整条链含键盘/显示；我们只测 core↔adapter 这一格，会小 1~2 个数量级）。
+3. **帧时间（render）**：单帧 `render`/`blitScroll` 的 p50/p95（µs）+ 滚动 FPS（rAF 打点）。参考：WezTerm paint p50 921µs / p95 2.06ms；Metalterm GPU 0.22ms/帧。
+
+### 启动命令区分（bench 模式）
+
+demo 用 URL query 切模式，同一页面同一份代码，只换 renderer/负载：
+
+- `?renderer=canvas|dom|text|webgl|webgpu`——选 adapter。
+- `?bench=throughput|latency|scroll`——选采样负载。
+- `?perf=1`——开 float panel + 记录。
+- `?cols=80&rows=200`——网格尺寸。
+
+Node 侧 smoke 用同款参数（`node js/bench.mjs --renderer=canvas --bench=throughput`），双端一致。
+
+### float panel（浮动性能面板）
+
+demo 页右上角一个半透明浮动面板（perf HUD），采样期间实时显示并记录：
+
+- FPS / 帧时间（p50 p95 p99，滚动窗口）
+- `feed()` 延迟 p50/p95/p99
+- change 数/秒（diff 密度）
+- 本次会话吞吐 MB/s + 内存（grid 行数 / scrollback 行数）
+
+面板带「导出」按钮，把滚动窗口原始样本 dump 成 JSON/CSV 供离线对比。实现只用 `performance.now()` + 环形缓冲，不引第三方依赖。
