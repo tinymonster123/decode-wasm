@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["crates/decode-core", "crates/decode-wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+vte = { version = "0.15", features = ["ansi"] }
+unicode-width = "0.2"
+wasm-bindgen = "0.2"
+serde_json = "1"

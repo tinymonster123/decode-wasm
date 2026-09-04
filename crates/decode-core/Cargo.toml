@@ -1,0 +1,9 @@
+[package]
+name = "decode-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vte = { workspace = true }
+unicode-width = { workspace = true }
