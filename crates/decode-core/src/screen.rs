@@ -57,6 +57,8 @@ pub(crate) struct Screen {
     scroll_bottom: usize,
     saved_cursor: Option<Cursor>,
     wrap_pending: bool,
+    /// DECAWM（`?7`）：行尾自动换行。默认开启。
+    autowrap: bool,
     alt: Option<AltScreen>,
     changes: Vec<Change>,
 }
@@ -73,6 +75,7 @@ impl Screen {
             scroll_bottom: rows - 1,
             saved_cursor: None,
             wrap_pending: false,
+            autowrap: true,
             alt: None,
             changes: Vec::new(),
         }
@@ -99,6 +102,7 @@ impl Screen {
         self.cursor.col = self.cursor.col.min(cols - 1);
         self.scroll_top = 0;
         self.scroll_bottom = rows - 1;
+        self.wrap_pending = false; // resize 后光标位置被钳制，旧的挂起换行失效
         self.push_reset();
     }
 
@@ -146,6 +150,7 @@ impl Screen {
 
     /// 光标下移一行；到底则滚动区域。不含回车（LF 语义）。
     fn lf_down(&mut self) {
+        self.wrap_pending = false; // 换行清除挂起的自动换行
         if self.cursor.row == self.scroll_bottom {
             let (top, bottom) = (self.scroll_top, self.scroll_bottom);
             self.grid.scroll_up(top, bottom, 1);
@@ -185,21 +190,26 @@ impl Screen {
 
 impl Handler for Screen {
     fn input(&mut self, c: char) {
-        let width = UnicodeWidthChar::width(c).unwrap_or(0);
+        let mut width = UnicodeWidthChar::width(c).unwrap_or(0);
         if width == 0 {
             return; // 零宽/组合字符：v1 忽略（grapheme 簇 v2）
         }
 
-        // 自动换行：上一字符写到了行尾
-        if self.wrap_pending {
-            self.wrap_pending = false;
-            self.cursor.col = 0;
-            self.lf_down();
-        }
-        // 宽字符在行尾放不下：先换行
-        if width == 2 && self.cursor.col + 1 >= self.cols {
-            self.cursor.col = 0;
-            self.lf_down();
+        if self.autowrap {
+            // 自动换行：上一字符写到了行尾
+            if self.wrap_pending {
+                self.wrap_pending = false;
+                self.cursor.col = 0;
+                self.lf_down();
+            }
+            // 宽字符在行尾放不下：先换行
+            if width == 2 && self.cursor.col + 1 >= self.cols {
+                self.cursor.col = 0;
+                self.lf_down();
+            }
+        } else if width == 2 && self.cursor.col + 1 >= self.cols {
+            // autowrap 关闭：宽字符在最后一列放不下，截断为单宽覆盖最后一格
+            width = 1;
         }
 
         let (row, col) = (self.cursor.row, self.cursor.col);
@@ -215,21 +225,30 @@ impl Handler for Screen {
             self.write_cell(row, col + 1, Cell::spacer());
         }
 
-        self.cursor.col = (col + width as usize).min(self.cols - 1);
-        self.wrap_pending = self.cursor.col + 1 >= self.cols;
+        self.cursor.col = col + width;
+        if self.cursor.col >= self.cols {
+            // 写满了最后一列：光标停在最后一列，置 wrap_pending，下次换行。
+            self.cursor.col = self.cols - 1;
+            self.wrap_pending = true;
+        } else {
+            self.wrap_pending = false;
+        }
     }
 
     fn goto(&mut self, line: i32, col: usize) {
         self.cursor.row = line.clamp(0, self.rows as i32 - 1) as usize;
         self.cursor.col = col.min(self.cols - 1);
+        self.wrap_pending = false;
     }
 
     fn goto_line(&mut self, line: i32) {
         self.cursor.row = line.clamp(0, self.rows as i32 - 1) as usize;
+        self.wrap_pending = false;
     }
 
     fn goto_col(&mut self, col: usize) {
         self.cursor.col = col.min(self.cols - 1);
+        self.wrap_pending = false;
     }
 
     fn insert_blank(&mut self, count: usize) {
@@ -252,18 +271,22 @@ impl Handler for Screen {
 
     fn move_up(&mut self, rows: usize) {
         self.cursor.row = self.cursor.row.saturating_sub(rows);
+        self.wrap_pending = false;
     }
 
     fn move_down(&mut self, rows: usize) {
         self.cursor.row = (self.cursor.row + rows).min(self.rows - 1);
+        self.wrap_pending = false;
     }
 
     fn move_forward(&mut self, cols: usize) {
         self.cursor.col = (self.cursor.col + cols).min(self.cols - 1);
+        self.wrap_pending = false;
     }
 
     fn move_backward(&mut self, cols: usize) {
         self.cursor.col = self.cursor.col.saturating_sub(cols);
+        self.wrap_pending = false;
     }
 
     fn move_down_and_cr(&mut self, rows: usize) {
@@ -284,14 +307,17 @@ impl Handler for Screen {
                 break;
             }
         }
+        self.wrap_pending = false;
     }
 
     fn backspace(&mut self) {
         self.cursor.col = self.cursor.col.saturating_sub(1);
+        self.wrap_pending = false;
     }
 
     fn carriage_return(&mut self) {
         self.cursor.col = 0;
+        self.wrap_pending = false; // 光标移动清除挂起的自动换行
     }
 
     fn linefeed(&mut self) {
@@ -358,6 +384,7 @@ impl Handler for Screen {
     fn restore_cursor_position(&mut self) {
         if let Some(c) = self.saved_cursor {
             self.cursor = c;
+            self.wrap_pending = false;
         }
     }
 
@@ -422,11 +449,13 @@ impl Handler for Screen {
         self.scroll_bottom = self.rows - 1;
         self.saved_cursor = None;
         self.wrap_pending = false;
+        self.autowrap = true;
         self.alt = None;
         self.push_reset();
     }
 
     fn reverse_index(&mut self) {
+        self.wrap_pending = false;
         if self.cursor.row == self.scroll_top {
             let (top, bottom) = (self.scroll_top, self.scroll_bottom);
             self.grid.scroll_down(top, bottom, 1);
@@ -473,6 +502,7 @@ impl Handler for Screen {
         match mode {
             PrivateMode::Named(NamedPrivateMode::ShowCursor) => self.cursor.hidden = false,
             PrivateMode::Named(NamedPrivateMode::SwapScreenAndSetRestoreCursor) => self.enter_alt(),
+            PrivateMode::Named(NamedPrivateMode::LineWrap) => self.autowrap = true,
             _ => {}
         }
     }
@@ -481,6 +511,7 @@ impl Handler for Screen {
         match mode {
             PrivateMode::Named(NamedPrivateMode::ShowCursor) => self.cursor.hidden = true,
             PrivateMode::Named(NamedPrivateMode::SwapScreenAndSetRestoreCursor) => self.exit_alt(),
+            PrivateMode::Named(NamedPrivateMode::LineWrap) => self.autowrap = false,
             _ => {}
         }
     }
@@ -492,6 +523,7 @@ impl Handler for Screen {
         self.scroll_bottom = bottom.max(top);
         self.cursor.row = 0;
         self.cursor.col = 0;
+        self.wrap_pending = false;
     }
 }
 
