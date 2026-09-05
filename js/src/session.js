@@ -8,6 +8,7 @@
 // 直接把它喂给 adapter。
 
 import { newGrid, applyChanges } from './grid.js';
+import { decodeChanges } from './decode.js';
 
 /**
  * @param {{
@@ -26,7 +27,7 @@ export function createSession({ core, cols, rows, renderer, onFrame }) {
    * 返回本次解析出的 change 数组（供采样统计 change 数/字节数）。
    */
   function feed(bytes) {
-    const changes = JSON.parse(core.feed(bytes));
+    const changes = decodeChanges(core.feed(bytes));
     cursor = applyChanges(grid, cols, rows, changes);
 
     const scrolls = changes.filter((c) => c.t === 'scroll_up' || c.t === 'scroll_down');
@@ -57,7 +58,7 @@ export function createSession({ core, cols, rows, renderer, onFrame }) {
     rows = r;
     grid = newGrid(c, r);
     core.resize(c, r);
-    const changes = JSON.parse(core.feed(new Uint8Array(0)));
+    const changes = decodeChanges(core.feed(new Uint8Array(0)));
     cursor = applyChanges(grid, cols, rows, changes);
     if (renderer.resize) renderer.resize(c, r);
     renderer.render(grid, cursor);

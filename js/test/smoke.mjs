@@ -6,12 +6,13 @@
 import assert from 'node:assert/strict';
 import { Core } from '../pkg-node/decode_wasm.js';
 import { newGrid, applyChanges, gridText } from '../src/grid.js';
+import { decodeChanges } from '../src/decode.js';
 import { VIM_COLS, VIM_ROWS, vimStartupBytes } from '../fixtures/vim-start.js';
 
 const core = new Core(VIM_COLS, VIM_ROWS);
 const grid = newGrid(VIM_COLS, VIM_ROWS);
 
-const changes = JSON.parse(core.feed(vimStartupBytes()));
+const changes = decodeChanges(core.feed(vimStartupBytes()));
 const cursor = applyChanges(grid, VIM_COLS, VIM_ROWS, changes);
 
 // 1) change 流只报「变更」：有 cell/clear/cursor/reset，无滚动（3 行文件不滚动）。

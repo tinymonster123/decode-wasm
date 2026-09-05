@@ -1,9 +1,9 @@
 // 三轴 cross-engine 对比：decode-wasm（WASM + JSON FFI）vs xterm.js（headless core）。
 //
 // 同一份 vim 启动字节流、同一网格尺寸、同一 chunking，两引擎各自同步喂字节：
-//   decode_wasm: Core.feed(bytes)                      → Rust parse + 网格 + diff + JSON 序列化（返回 JSON 字符串）
+//   decode_wasm: Core.feed(bytes)                      → Rust parse + 网格 + diff + 紧凑二进制（返回 Uint8Array）
 //   xterm.js   : Terminal._inputHandler.parse(bytes)   → JS parse + buffer 更新（无 diff、无序列化）
-// 注意不对称：decode_wasm 的 feed() 含 JSON diff 序列化（#7 待去除）；xterm.js 无此成本。
+// 注意不对称：decode_wasm 的 feed() 含 diff 编码（#7 去 JSON 化后是紧凑二进制，非零但已大幅下降）；xterm.js 无此成本。
 //
 // 用法：
 //   npm run bench:compare                 # 80×24，表格输出
@@ -99,11 +99,11 @@ async function main() {
   const ENG = engines(Terminal);
   const fmt = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 
-  // JSON 膨胀：feed 一次 vim 流，量 JSON 输出/输入比（#7 量化依据）
+  // 二进制膨胀：feed 一次 vim 流，量 FFI 输出/输入比（#7 去 JSON 化后的余量）
   const base = vimStartupBytes();
   const core = new Core(COLS, ROWS);
-  const jsonOut = core.feed(base).length;
-  const amplification = jsonOut / base.length;
+  const binOut = core.feed(base).length;
+  const amplification = binOut / base.length;
 
   const rowsT = [], rowsL = [], rowsS = [];
   if (!json) {
@@ -124,11 +124,11 @@ async function main() {
     const r = benchScroll(eng); rowsS.push({ name, ...r });
     if (!json) console.log(`  ${name.padEnd(12)} ${fmt(r.rowsPerSec, 0).padStart(7)} 行/s   p50 ${fmt(r.ms.p50, 3)} ms  (${r.lines} 行)`);
   }
-  if (!json) console.log(`\nJSON 膨胀：${base.length}B 输入 → ${jsonOut}B JSON（${amplification.toFixed(1)}×）——decode_wasm feed 的序列化开销（#7 待去除）`);
+  if (!json) console.log(`\n二进制膨胀：${base.length}B 输入 → ${binOut}B（${amplification.toFixed(1)}×）——decode_wasm feed 的 FFI 载荷（#7 去 JSON 化后）`);
 
   if (json) console.log(JSON.stringify({
     size: `${COLS}x${ROWS}`,
-    jsonAmplification: amplification,
+    binAmplification: amplification,
     throughput: Object.fromEntries(rowsT.map(r => [r.name, { mbpsMedian: r.mbpsMedian, mbpsMin: r.mbpsMin, mbpsMax: r.mbpsMax, bytes: r.bytes }])),
     latency: Object.fromEntries(rowsL.map(r => [r.name, r.ms])),
     scroll: Object.fromEntries(rowsS.map(r => [r.name, { rowsPerSec: r.rowsPerSec, p50ms: r.ms.p50 }])),

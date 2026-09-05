@@ -1,13 +1,13 @@
 # decode-wasm demo（js/）
 
 浏览器端 demo + Node 端 smoke/bench test，驱动 `decode-core`（Rust → WASM）。核心只吐
-`Box<[Change]>`（JSON 序列化给 JS），渲染是 JS 侧的事——这一层是 SPEC §10/§11 锁定的
-「端口 + adapter 层」。
+`Box<[Change]>`（编码成紧凑二进制 `Uint8Array` 给 JS，见 #7 去 JSON 化），渲染是 JS 侧的
+事——这一层是 SPEC §10/§11 锁定的「端口 + adapter 层」。
 
 ## 分层
 
 ```
-feed(bytes) → Core(wasm) → change 流(JSON) → src/grid.js(权威 grid) → src/session.js(编排)
+feed(bytes) → Core(wasm) → change 流(二进制) → src/decode.js(解码) → src/grid.js(权威 grid) → src/session.js(编排)
                                                                        ├─ src/renderers/canvas.js（像素）
                                                                        ├─ src/renderers/dom.js（元素）
                                                                        ├─ src/renderers/text.js（ANSI 字符串）
@@ -21,6 +21,7 @@ js/
 ├── index.html                      # 浏览器 demo 页（URL 保持 /js/）
 ├── main.js                         # 浏览器唯一入口；唯一 import ./pkg 的源文件
 ├── src/                            # 双端共用产品代码；禁止 import pkg / pkg-node
+│   ├── decode.js                   # FFI 二进制解码：Core.feed() 的 Uint8Array → change 对象数组（与 lib.rs encode_changes 对齐）
 │   ├── session.js                  # 编排：feed → apply → 判定（blit vs 全量）→ 调 adapter
 │   ├── grid.js                     # 共享表示：newGrid / applyChanges / gridText。**唯一权威 grid 状态。**
 │   ├── palette.js                  # 颜色编码（256 调色板 / 默认 / truecolor）→ CSS 颜色
@@ -36,6 +37,7 @@ js/
 ├── fixtures/
 │   └── vim-start.js                # 真实 vim 启动字节流（demo / smoke / bench 共用）
 ├── test/                           # Node 验收入口（允许 import ./pkg-node）
+│   ├── decode.test.mjs             # FFI 二进制解码器单元测试（锁格式 + Core.feed 往返）
 │   ├── adapters.test.mjs           # adapter 层验收（factory 不 fallback + text 与 grid 一致）
 │   ├── smoke.mjs                   # Node 端到端 smoke test（canvas 不回归）
 │   └── strip-ansi.js               # 测试工具：剥 SGR 序列（从 text renderer 迁出，不属端口）
@@ -85,15 +87,15 @@ Node 无面板：浏览器 `perf=1` 的 float panel 只存在于 demo 页；benc
 
 ### cross-engine 对比（bench:compare）
 
-三轴对比 decode-wasm（WASM + JSON FFI）vs xterm.js（headless core），量化 #7「桥接去 JSON 化」
-的序列化开销。依赖 devDependency `@xterm/headless`（`npm install` 即装）：
+三轴对比 decode-wasm（WASM + 紧凑二进制 FFI）vs xterm.js（headless core），量化 #7「桥接去
+JSON 化」的收益。依赖 devDependency `@xterm/headless`（`npm install` 即装）：
 
 ```sh
 npm run bench:compare                       # 80×24 表格
 npm run bench:compare -- --size=120x40 --json   # 自定义尺寸 + 机器可读
 ```
 
-纯 core 上限（native release，去掉 JSON 序列化后的理论上限）：
+纯 core 上限（native release，去掉序列化后的理论上限）：
 
 ```sh
 cargo run --release --example throughput    # decode-core 纯解析（无序列化）

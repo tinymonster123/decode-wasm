@@ -10,4 +10,3 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 decode-core = { path = "../decode-core" }
 wasm-bindgen = { workspace = true }
-serde_json = { workspace = true }

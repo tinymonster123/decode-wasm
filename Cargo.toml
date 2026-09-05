@@ -11,4 +11,3 @@ license = "MIT"
 vte = { version = "0.15", features = ["ansi"] }
 unicode-width = "0.2"
 wasm-bindgen = "0.2"
-serde_json = "1"
