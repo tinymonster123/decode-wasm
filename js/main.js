@@ -1,38 +1,36 @@
 // 浏览器 demo 入口：加载 WASM Core → 按 URL query 选 adapter + bench 负载 → 喂字节 → 画。
 //
-// SPEC §10/§11：URL query 切 renderer / bench / perf / cols / rows，同一份代码只换后端与负载。
+// SPEC §10/§11：URL query 切 renderer / bench / perf / size，同一份代码只换后端与负载。
 //   http://localhost:8000/js/                                    （默认 canvas + vim demo）
-//   http://localhost:8000/js/?renderer=dom&bench=throughput&perf=1&cols=80&rows=200
-// adapter 显式声明、一次只装一个；未知 backend 由 factory 直接 throw（不做隐式 fallback）。
+//   http://localhost:8000/js/?renderer=dom&bench=throughput&perf=1&size=80x200
+// 键面解析/校验走 config.js（决策 #6）；未知 renderer 由 config 直接 throw（不做隐式 fallback）。
 //
 // web target 的 glue 用 fetch 加载 .wasm，`file://` 下被浏览器 CORS 拦，要用 http.server。
 
 import init, { Core } from './pkg/decode_wasm.js';
-import { createRenderer, BACKENDS } from './src/renderers/index.js';
+import { createRenderer } from './src/renderers/index.js';
 import { createSession } from './src/session.js';
 import { createPerfSampler, now } from './src/perf.js';
 import { runBench } from './src/bench-common.js';
 import { createPanel } from './src/panel.js';
+import { parseConfig } from './config.js';
 import { VIM_COLS, VIM_ROWS, vimStartupBytes } from './fixtures/vim-start.js';
 
 await init();
 
-const qs = new URLSearchParams(location.search);
-const backend = qs.get('renderer') ?? 'canvas';
-const bench = qs.get('bench'); // undefined = 默认 vim demo
-const perf = qs.get('perf') === '1';
-// 尺寸兜底：parseInt(null/''/'abc') 都会 NaN，直接传给 Core/renderer 会崩或得 0 列。
-function parseDim(v, fallback) {
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+// 键面解析/校验集中在 config.js：URLSearchParams.entries() 传入，浏览器默认 size 显式
+// 一行 = VIM 尺寸（60×15，demo 画面按它调的）。size 只是键面，config 层拆回 cols/rows。
+// 报错时把 message 写进页面正文再抛，对齐今天「未知 renderer」的可视行为。
+let cfg;
+try {
+  cfg = parseConfig(new URLSearchParams(location.search).entries(), {
+    defaults: { size: `${VIM_COLS}x${VIM_ROWS}` },
+  });
+} catch (err) {
+  document.body.textContent = err.message;
+  throw err;
 }
-const cols = parseDim(qs.get('cols'), VIM_COLS);
-const rows = parseDim(qs.get('rows'), VIM_ROWS);
-
-if (!BACKENDS.includes(backend)) {
-  document.body.textContent = `未知 renderer: "${backend}"（可选 ${BACKENDS.join('|')}）`;
-  throw new Error(`未知 renderer: "${backend}"`);
-}
+const { renderer: backend, bench, perf, cols, rows } = cfg;
 
 // 屏幕容器：按后端建对应元素（canvas / div 行容器 / pre 纯文本）。
 const screenEl = document.getElementById('screen');

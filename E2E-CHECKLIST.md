@@ -11,7 +11,7 @@
   - `?renderer=canvas|dom|text`（默认 canvas）
   - `?bench=throughput|latency|scroll`（有则 bench 模式，无则 vim demo）
   - `?perf=1`（float 性能 HUD）
-  - `?cols=N&rows=N`（非法/空回退 VIM 60×15；`parseDim` 只认 `>0` 的整数）
+  - `?size=COLSxROWS`（默认 VIM 60×15；键面解析走 `js/config.js`，非法值如 `size=abc`/`size=80` 报错退出，body 显示「未知 size」）
 - 三后端 DOM 形状：
   - canvas → `#screen > canvas`
   - dom → `#screen > div.dom-screen`，一行一个子 `<div>`（默认 15 行）
@@ -64,13 +64,13 @@
 
 | # | URL | 断言 |
 |---|---|---|
-| E1 | `/js/?renderer=canvas&cols=80&rows=24` | canvas `800×480`（80×10 × 24×20） |
-| E2 | `/js/?renderer=canvas&cols=abc&rows=0` | 回退默认 `600×300`（不崩、不 0 尺寸） |
-| E3 | `/js/?renderer=canvas&cols=&rows=` | 回退默认 `600×300` |
-| E4 | `/js/?renderer=dom&rows=24` | `.dom-screen` 子 `<div>` 行数 = 24 |
+| E1 | `/js/?renderer=canvas&size=80x24` | canvas `800×480`（80×10 × 24×20） |
+| E2 | `/js/?renderer=canvas&size=abc` | `body` 含 `未知 size: "abc"`；`pageerror` 捕获 throw |
+| E3 | `/js/?renderer=canvas&size=80` | `body` 含 `未知 size`（缺 rows）；`pageerror` 捕获 throw |
+| E4 | `/js/?renderer=dom&size=80x24` | `.dom-screen` 子 `<div>` 行数 = 24 |
 
 ## F. Node 回归（非 Playwright，防手改）
 
-- `npm test` 全绿（adapters 19 项 + smoke 762 条 change）
+- `npm test` 全绿（config 12 项 + adapters 19 项 + smoke 762 条 change）
 - `npm run bench -- --renderer=text --bench=throughput` 出数（core/full 双档）
 - `npm run build:glue` exit 0，且 `js/pkg-node/package.json` = `{"type": "commonjs"}`（CJS 标记不能丢）

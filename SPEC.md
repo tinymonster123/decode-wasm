@@ -222,14 +222,16 @@ interface Renderer {
 
 ### 启动命令区分（bench 模式）
 
-demo 用 URL query 切模式，同一页面同一份代码，只换 renderer/负载：
+demo 用 URL query 切模式，同一页面同一份代码，只换 renderer/负载。键面解析/校验收敛到
+共享 `js/config.js`（决策 #6）：浏览器传 URLSearchParams、Node 传 argv→键值对，解析/校验只此一份。
 
-- `?renderer=canvas|dom|text|webgl|webgpu`——选 adapter。
-- `?bench=throughput|latency|scroll`——选采样负载。
-- `?perf=1`——开 float panel + 记录。
-- `?cols=80&rows=200`——网格尺寸。
+- `?renderer=canvas|dom|text|webgl|webgpu`——选 adapter（默认 canvas）。
+- `?bench=throughput|latency|scroll`——选采样负载（demo/bench 切换保持隐式：`?bench=` 存在即 bench）。
+- `?perf=1`——开 float panel + 记录（浏览器面专属）。
+- `?size=COLSxROWS`——网格尺寸（如 `?size=80x200`）；浏览器默认 60×15（VIM 尺寸），Node 默认 80×24。
 
-Node 侧 smoke 用同款参数（`node js/cli/bench.mjs --renderer=canvas --bench=throughput`），双端一致。
+Node 侧同款参数：`node js/cli/bench.mjs --renderer=canvas --bench=throughput --size=80x24`
+（Node 面无面板、无 `--perf`；`--json` 输出机器可读结果）。
 
 ### float panel（浮动性能面板）
 

@@ -5,7 +5,7 @@
   "scripts": {
     "serve": "python3 -m http.server 8000",
     "build:glue": "cargo build --release --target wasm32-unknown-unknown -p decode-wasm && wasm-bindgen target/wasm32-unknown-unknown/release/decode_wasm.wasm --out-dir js/pkg --target web && wasm-bindgen target/wasm32-unknown-unknown/release/decode_wasm.wasm --out-dir js/pkg-node --target nodejs && echo '{\"type\": \"commonjs\"}' > js/pkg-node/package.json",
-    "test": "node js/test/adapters.test.mjs && node js/test/smoke.mjs",
+    "test": "node js/test/config.test.mjs && node js/test/adapters.test.mjs && node js/test/smoke.mjs",
     "bench": "node js/cli/bench.mjs"
   }
 }

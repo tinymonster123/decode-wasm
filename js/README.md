@@ -54,15 +54,15 @@ cd decode_wasm && python3 -m http.server
 # 浏览器打开 http://localhost:8000/js/
 ```
 
-URL query 切后端与负载（同一份代码只换后端）：
+URL query 切后端与负载（同一份代码只换后端；键面 renderer / bench / perf / size）：
 
 ```sh
 # 默认：canvas + vim demo
 http://localhost:8000/js/
 # 换后端：dom / text（canvas/webgl/webgpu 同理，webgl/webgpu 是 v2 桩会抛错）
 http://localhost:8000/js/?renderer=dom
-# 三轴 bench + float panel + 网格尺寸
-http://localhost:8000/js/?renderer=canvas&bench=throughput&perf=1&cols=80&rows=200
+# 三轴 bench + float panel + 网格尺寸（size=COLSxROWS）
+http://localhost:8000/js/?renderer=canvas&bench=throughput&perf=1&size=80x200
 http://localhost:8000/js/?renderer=text&bench=latency&perf=1
 http://localhost:8000/js/?renderer=canvas&bench=scroll&perf=1
 ```
@@ -71,13 +71,17 @@ Node smoke / 验收 / bench（双端同款参数；`npm test` / `npm run bench` 
 
 ```sh
 cd decode_wasm
-npm test                     # adapters.test + smoke（等价于下面两条 node 命令）
-node js/test/smoke.mjs           # 端到端 smoke（canvas 路径回归）
-node js/test/adapters.test.mjs   # adapter 层验收
-node js/cli/bench.mjs --renderer=text --bench=throughput --cols=80 --rows=24
+npm test                          # config + adapters.test + smoke（等价于下面几条 node 命令）
+node js/test/config.test.mjs      # 启动配置解析/校验
+node js/test/smoke.mjs            # 端到端 smoke（canvas 路径回归）
+node js/test/adapters.test.mjs    # adapter 层验收
+node js/cli/bench.mjs --renderer=text --bench=throughput --size=80x24
 node js/cli/bench.mjs --renderer=canvas --bench=latency   # Node 无 DOM，只测 core parse
 node js/cli/bench.mjs --renderer=text --bench=scroll --json
 ```
+
+Node 无面板：浏览器 `perf=1` 的 float panel 只存在于 demo 页；bench CLI 直接输出百分位，
+不提供 `--perf` 旗标。
 
 ## 重新生成 glue
 

@@ -2,58 +2,32 @@
 //
 // 跑法（在仓库根目录）：
 //   node js/cli/bench.mjs --renderer=canvas|dom|text|webgl|webgpu --bench=throughput|latency|scroll \
-//        --cols=80 --rows=24 --perf --json
+//        --size=80x24 --json
 //
-// 与浏览器 ?bench= 路径共用 bench-common.js 的同一套负载/runner，保证两边的
-// 吞吐/延迟/滚动数字口径一致。Node 无 DOM，只有 text renderer 能实例化，
-// 因此 full 档只在 --renderer=text 时测，其余 backend 只测 core parse 档。
+// 键面解析/校验走 config.js（决策 #6）。与浏览器 ?bench= 路径共用 bench-common.js 的
+// 同一套负载/runner，保证两边的吞吐/延迟/滚动数字口径一致。Node 无 DOM，只有 text
+// renderer 能实例化，因此 full 档只在 --renderer=text 时测，其余 backend 只测 core parse 档。
+// （Node 无面板；浏览器 perf=1 的 float panel 不适用于本 CLI。）
 
 import { Core } from '../pkg-node/decode_wasm.js';
-import { createRenderer, BACKENDS } from '../src/renderers/index.js';
+import { createRenderer } from '../src/renderers/index.js';
 import { createSession } from '../src/session.js';
 import { runBench } from '../src/bench-common.js';
+import { parseConfig } from '../config.js';
 
 /**
- * 解析 process.argv 里的 --key=value 或 --key value 参数。
- * 布尔键（perf/json）支持裸 flag（--perf 即 true）；数值键（cols/rows）parseInt。
+ * process.argv → 键值对（~10 行）：`--key=value` → [key, value]；裸 `--key`（布尔键）→ [key, null]。
+ * 解析/校验交给 config.js 的 parseConfig，这里只做机械转换。
  */
-function parseArgs(argv) {
-  const opts = {
-    renderer: 'canvas',
-    bench: 'throughput',
-    cols: 80,
-    rows: 24,
-    perf: false,
-    json: false,
-  };
-  const isBool = (k) => k === 'perf' || k === 'json';
-  const isNum = (k) => k === 'cols' || k === 'rows';
-
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
+function argvPairs(argv) {
+  const pairs = [];
+  for (const token of argv) {
     if (!token.startsWith('--')) continue;
     const body = token.slice(2);
     const eq = body.indexOf('=');
-    let key = body;
-    let val = null; // null 表示没在 `=` 里显式给值，需从下一个 token 取
-    if (eq >= 0) {
-      key = body.slice(0, eq);
-      val = body.slice(eq + 1);
-    }
-    if (!(key in opts)) continue; // 未知参数忽略，不炸
-
-    if (isBool(key)) {
-      // 裸 flag（--perf）→ true；--perf=false → false
-      opts[key] = val === null ? true : val === 'true' || val === '1' || val === 'yes';
-    } else if (isNum(key)) {
-      opts[key] = parseInt(val === null ? argv[i + 1] : val, 10);
-      if (val === null) i++; // 已消费下一个 token 作值
-    } else {
-      opts[key] = val === null ? argv[i + 1] : val;
-      if (val === null) i++;
-    }
+    pairs.push(eq >= 0 ? [body.slice(0, eq), body.slice(eq + 1)] : [body, null]);
   }
-  return opts;
+  return pairs;
 }
 
 /** 毫秒值 → 2 位小数字符串；NaN/undefined → '--'。 */
@@ -93,34 +67,35 @@ function format(result) {
 }
 
 function main() {
-  const opts = parseArgs(process.argv.slice(2));
+  // Node 默认 size 显式一行 = 80×24；bench 默认 = throughput（Node 无 demo 模式）。
+  const cfg = parseConfig(argvPairs(process.argv.slice(2)), {
+    defaults: { size: '80x24', bench: 'throughput' },
+  });
+  const { renderer, bench, cols, rows, json } = cfg;
 
   // 端口在 JS 侧、每 renderer 一个 adapter 共享 grid.js 网格（SPEC §10）。Node 无 DOM：
   // 只有 text 能实例化，webgl/webgpu 是 v2 桩会 throw，canvas/dom 需要真实元素。
-  const ctx = { makeCore: () => new Core(opts.cols, opts.rows) };
+  // renderer 的合法性已由 config.js 校验（未知直接 throw），此处只需区分 text vs 其余。
+  const ctx = { makeCore: () => new Core(cols, rows) };
 
-  if (opts.renderer === 'text') {
+  if (renderer === 'text') {
     ctx.makeSession = () =>
       createSession({
-        core: new Core(opts.cols, opts.rows),
-        cols: opts.cols,
-        rows: opts.rows,
-        renderer: createRenderer('text', { cols: opts.cols, rows: opts.rows }),
+        core: new Core(cols, rows),
+        cols,
+        rows,
+        renderer: createRenderer('text', { cols, rows }),
       });
-  } else if (BACKENDS.includes(opts.renderer)) {
+  } else {
     // 已知但非 text 的 backend：Node 无 DOM，只测 core parse（full 档跳过）。
     ctx.makeSession = undefined;
-    console.log('note renderer ' + opts.renderer + ' 在 Node 无 DOM，仅测 core parse（full 档跳过）');
-  } else {
-    // 未知 renderer：交给 factory 抛（adapter 显式声明、不做隐式 fallback）。
-    createRenderer(opts.renderer, { cols: opts.cols, rows: opts.rows });
+    console.log('note renderer ' + renderer + ' 在 Node 无 DOM，仅测 core parse（full 档跳过）');
   }
 
-  const result = runBench(opts.bench, ctx, { cols: opts.cols, rows: opts.rows });
+  const result = runBench(bench, ctx, { cols, rows });
 
   console.log(format(result));
-  if (opts.json) console.log(JSON.stringify(result));
-  if (opts.perf) console.log('float panel 是浏览器特性，Node 侧无面板；本 CLI 已直接输出百分位');
+  if (json) console.log(JSON.stringify(result));
 }
 
 try {
