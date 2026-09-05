@@ -81,10 +81,10 @@ node js/cli/bench.mjs --renderer=text --bench=scroll --json
 
 ## 重新生成 glue
 
-改 `crates/decode-wasm` 后：
+改 `crates/decode-wasm` 后，一条命令重建（`pkg/`、`pkg-node/` 为生成物，不在 git 里）：
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown -p decode-wasm
-wasm-bindgen target/wasm32-unknown-unknown/release/decode_wasm.wasm --out-dir js/pkg --target web
-wasm-bindgen target/wasm32-unknown-unknown/release/decode_wasm.wasm --out-dir js/pkg-node --target nodejs
+npm run build:glue
 ```
+
+fresh clone 先跑一次 `npm run build:glue` 生成 glue，`npm test` / demo 才能跑。

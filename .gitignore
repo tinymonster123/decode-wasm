@@ -2,3 +2,5 @@
 /.firecrawl
 /node_modules
 /dist
+js/pkg/
+js/pkg-node/
