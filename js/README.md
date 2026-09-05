@@ -83,6 +83,22 @@ node js/cli/bench.mjs --renderer=text --bench=scroll --json
 Node 无面板：浏览器 `perf=1` 的 float panel 只存在于 demo 页；bench CLI 直接输出百分位，
 不提供 `--perf` 旗标。
 
+### cross-engine 对比（bench:compare）
+
+三轴对比 decode-wasm（WASM + JSON FFI）vs xterm.js（headless core），量化 #7「桥接去 JSON 化」
+的序列化开销。依赖 devDependency `@xterm/headless`（`npm install` 即装）：
+
+```sh
+npm run bench:compare                       # 80×24 表格
+npm run bench:compare -- --size=120x40 --json   # 自定义尺寸 + 机器可读
+```
+
+纯 core 上限（native release，去掉 JSON 序列化后的理论上限）：
+
+```sh
+cargo run --release --example throughput    # decode-core 纯解析（无序列化）
+```
+
 ## 重新生成 glue
 
 改 `crates/decode-wasm` 后，一条命令重建（`pkg/`、`pkg-node/` 为生成物，不在 git 里）：
