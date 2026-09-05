@@ -5,7 +5,7 @@
 // requestAnimationFrame + perf.js 的环形缓冲，不引第三方依赖。
 //
 // 分层（SPEC §10/§11，决策 #13/#14/#16）：面板是纯观测者——只读 perf.js 的
-// createPerfSampler() 实例（summary()/dump()），不触碰 apply.js 网格、不介入渲染路径。
+// createPerfSampler() 实例（summary()/dump()），不触碰 grid.js 网格、不介入渲染路径。
 // 所有 DOM / window / requestAnimationFrame 访问都在 createPanel 函数体内，
 // 保证 Node `import './panel.js'` 不崩（模块顶层零 DOM 引用）。
 

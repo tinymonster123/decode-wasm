@@ -1,9 +1,9 @@
-// 文本 renderer（SPEC §10）：把 apply.js 的网格渲成 ANSI 字符串。
+// 文本 renderer（SPEC §10）：把 grid.js 的网格渲成 ANSI 字符串。
 //
 // 与 canvas/dom 不同，这个 adapter 不画任何东西——只做纯计算，输出一段带
 // ANSI SGR 转义序列的文本，浏览器和 Node 都能用（无 DOM / canvas 依赖）。
 // 三个用途：
-//   - 断言：stripAnsi(render(grid)) 严格等于 apply.js 的 gridText(grid, cols, rows)，
+//   - 断言：stripAnsi(render(grid)) 严格等于 grid.js 的 gridText(grid, cols, rows)，
 //     让 change 流 → 网格 → 文本这条链在 Node smoke 里可逐字比对。
 //   - 导出：把终端当前屏面 dump 成带颜色的文本（日志 / 快照）。
 //   - SSH：远端客户端的粗粒度后备（颜色交给客户端的终端解释）。
@@ -13,7 +13,7 @@
 
 const ESC = '\x1b';
 
-// 与 apply.js / palette.js 对齐的哨兵值（颜色编码见 SPEC §4）。
+// 与 grid.js / palette.js 对齐的哨兵值（颜色编码见 SPEC §4）。
 const DEFAULT_FG = 256;       // 默认前景哨兵 → SGR '39'
 const DEFAULT_BG = 257;       // 默认背景哨兵 → SGR '49'
 const TRUECOLOR_FLAG = 0x01000000; // 高位置位 = truecolor，低 24 位是 RGB
@@ -72,19 +72,7 @@ function buildSgr(fg, bg, attrs) {
 }
 
 /**
- * 剥掉所有 SGR 序列，得到纯文本。行尾无额外换行（与 gridText 一致）。
- * 断言前提：render 的字符序列 == gridText 的字符序列，只在字符之间插入 SGR，
- * 因此 stripAnsi(render(...)) === gridText(...) 严格成立。
- *
- * @param {string} s
- * @returns {string}
- */
-export function stripAnsi(s) {
-  return s.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-/**
- * 文本 renderer factory（factory 在 renderer.js 里按 `text` dispatch 到这里）。
+ * 文本 renderer factory（factory 在 index.js 里按 `text` dispatch 到这里）。
  *
  * @param {number} cols
  * @param {number} rows

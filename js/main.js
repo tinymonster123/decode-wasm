@@ -8,12 +8,12 @@
 // web target 的 glue 用 fetch 加载 .wasm，`file://` 下被浏览器 CORS 拦，要用 http.server。
 
 import init, { Core } from './pkg/decode_wasm.js';
-import { createRenderer, BACKENDS } from './renderer.js';
-import { createSession } from './session.js';
-import { createPerfSampler, now } from './perf.js';
-import { runBench } from './bench-common.js';
-import { createPanel } from './panel.js';
-import { VIM_COLS, VIM_ROWS, vimStartupBytes } from './vim-sequence.js';
+import { createRenderer, BACKENDS } from './src/renderers/index.js';
+import { createSession } from './src/session.js';
+import { createPerfSampler, now } from './src/perf.js';
+import { runBench } from './src/bench-common.js';
+import { createPanel } from './src/panel.js';
+import { VIM_COLS, VIM_ROWS, vimStartupBytes } from './fixtures/vim-start.js';
 
 await init();
 

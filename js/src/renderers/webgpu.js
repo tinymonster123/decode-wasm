@@ -1,7 +1,7 @@
 // WebGPU renderer（v2 接口桩，未实现）。
 //
 // SPEC §10（决策 #13/#14/#16）锁定：端口在 JS 侧，每个 renderer 一个 adapter，
-// 共享 apply.js 的网格模型（grid 即共享表示），不引入 scene/几何层。v2 的
+// 共享 grid.js 的网格模型（grid 即共享表示），不引入 scene/几何层。v2 的
 // WebGPU adapter 目标是「纹理图集 + instanced quad」的 immediate 绘制，逐帧把
 // 网格状态刷到 canvas——但当前只留接口桩，不做任何绘制资源、不 touch DOM/GPU。
 //

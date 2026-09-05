@@ -1,17 +1,17 @@
 // Node 端 bench CLI（SPEC §11「启动命令区分」的 Node 端）。
 //
 // 跑法（在仓库根目录）：
-//   node js/bench.mjs --renderer=canvas|dom|text|webgl|webgpu --bench=throughput|latency|scroll \
+//   node js/cli/bench.mjs --renderer=canvas|dom|text|webgl|webgpu --bench=throughput|latency|scroll \
 //        --cols=80 --rows=24 --perf --json
 //
 // 与浏览器 ?bench= 路径共用 bench-common.js 的同一套负载/runner，保证两边的
 // 吞吐/延迟/滚动数字口径一致。Node 无 DOM，只有 text renderer 能实例化，
 // 因此 full 档只在 --renderer=text 时测，其余 backend 只测 core parse 档。
 
-import { Core } from './pkg-node/decode_wasm.js';
-import { createRenderer, BACKENDS } from './renderer.js';
-import { createSession } from './session.js';
-import { runBench } from './bench-common.js';
+import { Core } from '../pkg-node/decode_wasm.js';
+import { createRenderer, BACKENDS } from '../src/renderers/index.js';
+import { createSession } from '../src/session.js';
+import { runBench } from '../src/bench-common.js';
 
 /**
  * 解析 process.argv 里的 --key=value 或 --key value 参数。
@@ -95,7 +95,7 @@ function format(result) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
 
-  // 端口在 JS 侧、每 renderer 一个 adapter 共享 apply.js 网格（SPEC §10）。Node 无 DOM：
+  // 端口在 JS 侧、每 renderer 一个 adapter 共享 grid.js 网格（SPEC §10）。Node 无 DOM：
   // 只有 text 能实例化，webgl/webgpu 是 v2 桩会 throw，canvas/dom 需要真实元素。
   const ctx = { makeCore: () => new Core(opts.cols, opts.rows) };
 

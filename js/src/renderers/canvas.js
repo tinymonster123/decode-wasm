@@ -1,10 +1,10 @@
 // CanvasRenderer（SPEC §10）：immediate 渲染器，直接往 2D canvas 画整个网格状态。
 //
-// 端口在 JS 侧、每 renderer 一个 adapter 共享 grid-model（apply.js）；grid 即共享
-// 表示，不引入 scene/几何层（决策 #13/#14/#16）。本 adapter 只读 apply.js 喂进来的
+// 端口在 JS 侧、每 renderer 一个 adapter 共享 grid-model（grid.js）；grid 即共享
+// 表示，不引入 scene/几何层（决策 #13/#14/#16）。本 adapter 只读 grid.js 喂进来的
 // 网格，自管 canvas/ctx 绘制资源，不复刻网格副本。
 //
-// 实现 Renderer 接口（见 renderer.js 注释）：
+// 实现 Renderer 接口（见 index.js 注释）：
 //   - render(grid, cursor)                      全量重绘
 //   - blitScroll(dir, top, bottom, count, ...)  纯滚动快路径（dir: 'up'/'down'）
 //   - resize(cols, rows)                        几何变化：重设 canvas 尺寸
@@ -12,7 +12,7 @@
 // canvas 是 immediate 模式（整帧/blit），不暴露逐格 drawCell 给调用方。
 // 模块顶层不碰 document/window，DOM 访问全部在 factory 函数体内（Node import 安全）。
 
-import { colorOf } from './palette.js';
+import { colorOf } from '../palette.js';
 
 const CW = 10; // 每格宽（px）
 const CH = 20; // 每格高（px）

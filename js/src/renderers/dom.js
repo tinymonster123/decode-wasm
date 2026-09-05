@@ -1,6 +1,6 @@
 // DOM renderer（SPEC §10 适配器清单）：一行一个 <div class="row">，每格一个 <span class="cell">。
 //
-// retained 策略（与 renderer.js 顶注释锁定的一致）：apply.js 的网格（Cell = { ch, width,
+// retained 策略（与 index.js 顶注释锁定的一致）：grid.js 的网格（Cell = { ch, width,
 // fg, bg, attrs }）是唯一权威，这里只维护「上次已渲染的 cell」副本（state[r][c]）+ 行/格
 // DOM 节点，逐帧 diff，只有 cell 的 ch/fg/bg/attrs/width 变了才改对应 span 的
 // textContent / style，其余跳过——这就是 retained 与 immediate 的区别（DOM 是 retained，
@@ -13,7 +13,7 @@
 // 硬约束：模块顶层不访问 document/window/requestAnimationFrame（Node import 不崩），
 // 所有 DOM 操作都在函数体内；只 import palette.js 的 colorOf；ESM export。
 
-import { colorOf } from './palette.js';
+import { colorOf } from '../palette.js';
 
 // 与 decode-core Cell 的颜色编码对齐（见 palette.js 顶部注释）。
 const DEFAULT_FG = 256;

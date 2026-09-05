@@ -4,10 +4,10 @@
 // Node（smoke.mjs / bench.mjs）共用，保证三个 sink 消费的是同一份网格、同一套
 // blit 判定——这就是「?renderer=canvas|dom|text 输出一致」的结构性前提。
 //
-// 它不引入 scene/几何层（决策 #16）：只持有 apply.js 的权威网格 + 光标，
+// 它不引入 scene/几何层（决策 #16）：只持有 grid.js 的权威网格 + 光标，
 // 直接把它喂给 adapter。
 
-import { newGrid, applyChanges } from './apply.js';
+import { newGrid, applyChanges } from './grid.js';
 
 /**
  * @param {{

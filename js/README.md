@@ -7,33 +7,43 @@
 ## 分层
 
 ```
-feed(bytes) → Core(wasm) → change 流(JSON) → apply.js(权威 grid) → session.js(编排)
-                                                                    ├─ canvas-renderer.js（像素）
-                                                                    ├─ dom-renderer.js（元素）
-                                                                    ├─ text-renderer.js（ANSI 字符串）
-                                                                    └─ webgl/webgpu-renderer.js（v2 桩）
+feed(bytes) → Core(wasm) → change 流(JSON) → src/grid.js(权威 grid) → src/session.js(编排)
+                                                                       ├─ src/renderers/canvas.js（像素）
+                                                                       ├─ src/renderers/dom.js（元素）
+                                                                       ├─ src/renderers/text.js（ANSI 字符串）
+                                                                       └─ src/renderers/webgl.js / webgpu.js（v2 桩）
 ```
 
-## 文件
+## 目录（按角色分目录，目录自解释）
 
-- `apply.js` — 纯网格模型：把 change 流应用到 JS 网格（无 DOM，浏览器/Node 共用）。**唯一权威 grid 状态。**
-- `palette.js` — 颜色编码（256 调色板 / 默认 / truecolor）→ CSS 颜色。
-- `renderer.js` — **端口**：`Renderer` 接口契约 + `createRenderer(backend, opts)` 显式 factory（未知 backend 直接 throw，不做隐式 fallback）。
-- `session.js` — 端口消费者侧驱动：feed → apply → 判定（blit vs 全量）→ 调 adapter。三 sink 共用。
-- `canvas-renderer.js` — CanvasRenderer（全量重绘 + 滚动 blit）。
-- `dom-renderer.js` — DOMRenderer（一行一个 `<div>`，retained + 增量 diff）。
-- `text-renderer.js` — TextRenderer（渲成 ANSI 字符串，纯文本用于断言/导出）。
-- `webgl-renderer.js` / `webgpu-renderer.js` — v2 接口桩（构造即 throw）。
-- `perf.js` — 环形缓冲 + 分位数 + 采样器（`performance.now()`，不引依赖）。
-- `bench-common.js` — 三轴 bench 负载 + runner（浏览器/Node 共用）。
-- `panel.js` — float perf HUD（右上角浮动面板，FPS/帧时间、feed 延迟 p50/p95/p99、change/s、吞吐 MB/s，可导出 JSON/CSV）。
-- `main.js` + `index.html` — 浏览器 demo 入口（按 query 切后端/负载）。
-- `vim-sequence.js` — 真实 vim 启动字节流（demo / smoke / bench 共用）。
-- `smoke.mjs` — Node 端到端 smoke test（canvas 不回归）。
-- `adapters.test.mjs` — adapter 层验收（factory 不 fallback + text 与 grid 一致）。
-- `bench.mjs` — Node 侧 bench CLI。
-- `pkg/` — `wasm-bindgen --target web` 生成的 glue（浏览器）。
-- `pkg-node/` — `wasm-bindgen --target nodejs` 生成的 glue（Node）。
+```
+js/
+├── index.html                      # 浏览器 demo 页（URL 保持 /js/）
+├── main.js                         # 浏览器唯一入口；唯一 import ./pkg 的源文件
+├── src/                            # 双端共用产品代码；禁止 import pkg / pkg-node
+│   ├── session.js                  # 编排：feed → apply → 判定（blit vs 全量）→ 调 adapter
+│   ├── grid.js                     # 共享表示：newGrid / applyChanges / gridText。**唯一权威 grid 状态。**
+│   ├── palette.js                  # 颜色编码（256 调色板 / 默认 / truecolor）→ CSS 颜色
+│   ├── perf.js                     # 环形缓冲 + 分位数 + 采样器（`performance.now()`，不引依赖）
+│   ├── bench-common.js             # 三轴 bench 负载 + runner（浏览器/Node 共用）
+│   ├── panel.js                    # float perf HUD（FPS/帧时间、feed 延迟 p50/p95/p99、change/s、吞吐 MB/s）
+│   └── renderers/                  # 端口 + adapter 层（SPEC §10 的 seam）
+│       ├── index.js                # **端口**：`Renderer` 契约 + `createRenderer(backend, opts)` 显式 factory（未知 backend 直接 throw，不做隐式 fallback）
+│       ├── canvas.js               # CanvasRenderer（全量重绘 + 滚动 blit）
+│       ├── dom.js                  # DOMRenderer（一行一个 `<div>`，retained + 增量 diff）
+│       ├── text.js                 # TextRenderer（渲成 ANSI 字符串，纯文本用于断言/导出）
+│       └── webgl.js / webgpu.js    # v2 接口桩（构造即 throw）
+├── fixtures/
+│   └── vim-start.js                # 真实 vim 启动字节流（demo / smoke / bench 共用）
+├── test/                           # Node 验收入口（允许 import ./pkg-node）
+│   ├── adapters.test.mjs           # adapter 层验收（factory 不 fallback + text 与 grid 一致）
+│   ├── smoke.mjs                   # Node 端到端 smoke test（canvas 不回归）
+│   └── strip-ansi.js               # 测试工具：剥 SGR 序列（从 text renderer 迁出，不属端口）
+├── cli/                            # Node 工具入口（允许 import ./pkg-node）
+│   └── bench.mjs                   # Node 侧 bench CLI
+├── pkg/                            # 生成物（wasm-bindgen --target web，浏览器）
+└── pkg-node/                       # 生成物（wasm-bindgen --target nodejs，Node）
+```
 
 ## 跑
 
@@ -57,15 +67,16 @@ http://localhost:8000/js/?renderer=text&bench=latency&perf=1
 http://localhost:8000/js/?renderer=canvas&bench=scroll&perf=1
 ```
 
-Node smoke / 验收 / bench（双端同款参数）：
+Node smoke / 验收 / bench（双端同款参数；`npm test` / `npm run bench` 为标准入口）：
 
 ```sh
 cd decode_wasm
-node js/smoke.mjs            # 端到端 smoke（canvas 路径回归）
-node js/adapters.test.mjs    # adapter 层验收
-node js/bench.mjs --renderer=text --bench=throughput --cols=80 --rows=24
-node js/bench.mjs --renderer=canvas --bench=latency   # Node 无 DOM，只测 core parse
-node js/bench.mjs --renderer=text --bench=scroll --json
+npm test                     # adapters.test + smoke（等价于下面两条 node 命令）
+node js/test/smoke.mjs           # 端到端 smoke（canvas 路径回归）
+node js/test/adapters.test.mjs   # adapter 层验收
+node js/cli/bench.mjs --renderer=text --bench=throughput --cols=80 --rows=24
+node js/cli/bench.mjs --renderer=canvas --bench=latency   # Node 无 DOM，只测 core parse
+node js/cli/bench.mjs --renderer=text --bench=scroll --json
 ```
 
 ## 重新生成 glue

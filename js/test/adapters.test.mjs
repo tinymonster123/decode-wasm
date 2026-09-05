@@ -3,15 +3,15 @@
 //   2) 同一份 vim 启动字节流，text sink 的纯文本输出与权威 gridText 严格一致
 //      （canvas/dom 是像素/节点，不能在此断言；三者由 session.js 保证消费同一份网格）。
 //
-// 跑法：node js/adapters.test.mjs  （在仓库根目录）
+// 跑法：node js/test/adapters.test.mjs  （在仓库根目录）
 import assert from 'node:assert/strict';
-import { Core } from './pkg-node/decode_wasm.js';
-import { createRenderer, BACKENDS } from './renderer.js';
-import { createSession } from './session.js';
-import { gridText } from './apply.js';
-import { stripAnsi } from './text-renderer.js';
-import { runBench, throughputPayload, scrollPayload, latencyChunks } from './bench-common.js';
-import { VIM_COLS, VIM_ROWS, vimStartupBytes } from './vim-sequence.js';
+import { Core } from '../pkg-node/decode_wasm.js';
+import { createRenderer, BACKENDS } from '../src/renderers/index.js';
+import { createSession } from '../src/session.js';
+import { gridText } from '../src/grid.js';
+import { stripAnsi } from './strip-ansi.js';
+import { runBench, throughputPayload, scrollPayload, latencyChunks } from '../src/bench-common.js';
+import { VIM_COLS, VIM_ROWS, vimStartupBytes } from '../fixtures/vim-start.js';
 
 let passed = 0;
 function ok(name, fn) {

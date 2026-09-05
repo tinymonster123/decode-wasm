@@ -3,14 +3,14 @@
 // SPEC §10（决策 #13/#14/#16）锁定：
 //   - 端口在 JS 侧，不是 Rust trait——Rust 侧 trait 会把 draw 调用推过 WASM 边界、
 //     把核心耦到渲染抽象。数据端口（Change 流）已经存在，端口 = 它的消费者侧接口。
-//   - 共享网格模型是 apply.js（唯一权威状态）；每个 adapter 只读它、只自管绘制资源，
+//   - 共享网格模型是 grid.js（唯一权威状态）；每个 adapter 只读它、只自管绘制资源，
 //     不复刻网格副本。
 //   - grid 即共享表示，不引入中间 scene/几何层（不采用 d3gl 式设计）。
 //
 // 每个 adapter 必须实现这个形状（SPEC §10 的接口，无运行时类型，靠约定 + 本注释锁定）：
 //
 //   render(grid, cursor)
-//     全量重绘（init / reset / 有内容变更时）。grid 是 apply.js 的网格
+//     全量重绘（init / reset / 有内容变更时）。grid 是 grid.js 的网格
 //     （Cell = { ch, width, fg, bg, attrs }），cursor 是 { row, col, hidden } | null。
 //
 //   blitScroll(dir, top, bottom, count, grid, cursor)
@@ -30,11 +30,11 @@
 // 硬约束：adapter 显式声明、一次只装一个；factory 遇未知 backend 直接 throw，
 // 禁止像 xterm.js 那样悄悄 fallback 到 DOM renderer（WebGL 失败会被 DOM 掩盖，问题查不到）。
 
-import { createCanvasRenderer } from './canvas-renderer.js';
-import { createDOMRenderer } from './dom-renderer.js';
-import { createTextRenderer } from './text-renderer.js';
-import { createWebGLRenderer } from './webgl-renderer.js';
-import { createWebGPURenderer } from './webgpu-renderer.js';
+import { createCanvasRenderer } from './canvas.js';
+import { createDOMRenderer } from './dom.js';
+import { createTextRenderer } from './text.js';
+import { createWebGLRenderer } from './webgl.js';
+import { createWebGPURenderer } from './webgpu.js';
 
 /** 可选 backend（与 SPEC §10 适配器清单对齐；webgl/webgpu 是 v2 接口桩）。 */
 export const BACKENDS = ['canvas', 'dom', 'text', 'webgl', 'webgpu'];

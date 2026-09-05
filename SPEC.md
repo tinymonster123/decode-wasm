@@ -167,7 +167,7 @@ decode_wasm/
 
 ### 端口：JS 侧的 `Renderer` 接口
 
-核心继续只吐 `Box<[Change]>`，Rust 一行不动。端口是消费者侧的一个接口，把现在 `renderer.js` 的方法显式化：
+核心继续只吐 `Box<[Change]>`，Rust 一行不动。端口是消费者侧的一个接口，把现在 `js/src/renderers/index.js` 的方法显式化：
 
 ```ts
 interface Renderer {
@@ -181,13 +181,13 @@ interface Renderer {
 关键约束（就是这一层的决策）：
 
 - **端口在 JS 侧，不是 Rust `trait Renderer`**。Rust 侧 trait 会把 draw 调用推过 WASM 边界、把核心耦到渲染抽象，破坏「渲染无关」。数据端口（Change 流）已经存在，端口 = 它的消费者侧接口。
-- **共享网格模型** `grid-model`（现在的 `apply.js`）是唯一权威状态；每个 adapter 只读它、只自管绘制资源，**不复刻网格副本**。
+- **共享网格模型** `grid-model`（现在的 `js/src/grid.js`）是唯一权威状态；每个 adapter 只读它、只自管绘制资源，**不复刻网格副本**。
 - **retained vs immediate**：DOM 是 retained（增量改节点），canvas/WebGL/WebGPU 是 immediate（整帧/blit）。所以 `Renderer` 只暴露「渲染这个网格状态」，不暴露「逐格 drawCell」——DOM adapter 内部自己 diff 决定改哪些节点。
 - **不许隐式回退**：adapter 显式声明、一次只装一个；禁止像 xterm.js 那样悄悄 fallback 到 DOM renderer（WebGL 失败会被 DOM 掩盖，问题查不到）。
 
 ### 适配器清单（v1）
 
-- `CanvasRenderer`——现有 `renderer.js` 抽成实现（像素）。
+- `CanvasRenderer`——现有 `js/src/renderers/index.js` 抽成实现（像素）。
 - `DOMRenderer`——一行一个 `<div>`，增量改 `textContent`/`style`（元素，最简单、最易维护）。
 - `TextRenderer`——把网格渲成 ANSI 字符串（纯文本，用于断言 / 导出 / SSH）。
 - `WebGLRenderer` / `WebGPURenderer`——纹理图集 + instanced quad（v2，为丝滑滚动铺路）。
@@ -229,7 +229,7 @@ demo 用 URL query 切模式，同一页面同一份代码，只换 renderer/负
 - `?perf=1`——开 float panel + 记录。
 - `?cols=80&rows=200`——网格尺寸。
 
-Node 侧 smoke 用同款参数（`node js/bench.mjs --renderer=canvas --bench=throughput`），双端一致。
+Node 侧 smoke 用同款参数（`node js/cli/bench.mjs --renderer=canvas --bench=throughput`），双端一致。
 
 ### float panel（浮动性能面板）
 

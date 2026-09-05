@@ -5,7 +5,7 @@
 //   --bench=throughput|latency|scroll（Node CLI）
 // 每轴都分两档测：core-only（core.feed 不渲染，纯 parser）vs full（session.feed 整条链）。
 
-import { vimStartupBytes } from './vim-sequence.js';
+import { vimStartupBytes } from '../fixtures/vim-start.js';
 
 /** 把一段字节重复 n 次拼成新数组。 */
 export function repeatBytes(src, n) {

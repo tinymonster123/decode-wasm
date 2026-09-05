@@ -1,12 +1,12 @@
 // Node 端到端 smoke test：把一段真实 vim 启动字节喂进编译好的 WASM Core，
-// 用 apply.js 把 change 流应用到 JS 网格，断言最终屏幕和 change 类型都正确。
+// 用 grid.js 把 change 流应用到 JS 网格，断言最终屏幕和 change 类型都正确。
 //
-// 跑法：node js/smoke.mjs  （在仓库根目录）
+// 跑法：node js/test/smoke.mjs  （在仓库根目录）
 // 依赖 js/pkg-node（wasm-bindgen --target nodejs 生成的 glue）。
 import assert from 'node:assert/strict';
-import { Core } from './pkg-node/decode_wasm.js';
-import { newGrid, applyChanges, gridText } from './apply.js';
-import { VIM_COLS, VIM_ROWS, vimStartupBytes } from './vim-sequence.js';
+import { Core } from '../pkg-node/decode_wasm.js';
+import { newGrid, applyChanges, gridText } from '../src/grid.js';
+import { VIM_COLS, VIM_ROWS, vimStartupBytes } from '../fixtures/vim-start.js';
 
 const core = new Core(VIM_COLS, VIM_ROWS);
 const grid = newGrid(VIM_COLS, VIM_ROWS);
