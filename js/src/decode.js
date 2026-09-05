@@ -5,11 +5,14 @@
 // 二进制格式（与 crates/decode-wasm/src/lib.rs 的 `encode_changes` 严格对齐，小端）：
 //   每条 change = 1 字节 tag + 定长载荷：
 //     0 cell        row:u32 col:u16 ch:u32(码点) width:u8 fg:u32 bg:u32 attrs:u16   (22B)
+//     6 cell_run    row:u32 col:u16 count:u16 fg:u32 bg:u32 attrs:u16 + 每格[ch:u32 width:u8]  (19B + 5B×count)
 //     1 scroll_up   top:u16 bottom:u16 count:u16                                    (7B)
 //     2 scroll_down top:u16 bottom:u16 count:u16                                    (7B)
 //     3 clear       row:u32 col:u16 count:u16                                       (9B)
 //     4 cursor      row:u32 col:u16 hidden:u8                                       (8B)
 //     5 reset                                                                        (1B)
+//   tag 0 与 6 都表示格子：连续同样式格子合并成 cell_run（共享 fg/bg/attrs 只存一次），
+//   解码时仍展开成逐格 cell 对象，所以下游 applyChanges 形状不变。
 //
 // 用 DataView 按 byteOffset/byteLength 读，兼容 `Uint8Array` 子视图（wasm-bindgen 返回
 // 或调用方 subarray 切出来的）。
@@ -32,6 +35,21 @@ export function decodeChanges(bytes) {
         const bg = view.getUint32(i, true); i += 4;
         const attrs = view.getUint16(i, true); i += 2;
         out.push({ t: 'cell', row, col, ch, width, fg, bg, attrs });
+        break;
+      }
+      case 6: {
+        // cell_run：共享样式，展开成 count 个逐格 cell（col 自增）。
+        const row = view.getUint32(i, true); i += 4;
+        const col = view.getUint16(i, true); i += 2;
+        const count = view.getUint16(i, true); i += 2;
+        const fg = view.getUint32(i, true); i += 4;
+        const bg = view.getUint32(i, true); i += 4;
+        const attrs = view.getUint16(i, true); i += 2;
+        for (let k = 0; k < count; k++) {
+          const ch = String.fromCodePoint(view.getUint32(i, true)); i += 4;
+          const width = view.getUint8(i); i += 1;
+          out.push({ t: 'cell', row, col: col + k, ch, width, fg, bg, attrs });
+        }
         break;
       }
       case 1:

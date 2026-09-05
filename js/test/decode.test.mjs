@@ -26,6 +26,29 @@ assert.equal(changes.length, 2);
 assert.deepEqual(changes[0], { t: 'cell', row: 0, col: 1, ch: '中', width: 2, fg: 1, bg: 2, attrs: 3 });
 assert.deepEqual(changes[1], { t: 'reset' });
 
+// 1b) cell_run：3 格同样式（fg1 bg2 attrs3，row2 起始 col5）→ 展开成 3 个逐格 cell。
+// tag(1) + row:u32 + col:u16 + count:u16 + fg:u32 + bg:u32 + attrs:u16 = 19B，加 3×5=15B。
+const run = new Uint8Array(34);
+const rv = new DataView(run.buffer);
+run[0] = 6;                                      // tag cell_run
+rv.setUint32(1, 2, true);                        // row
+rv.setUint16(5, 5, true);                        // col
+rv.setUint16(7, 3, true);                        // count
+rv.setUint32(9, 1, true);                        // fg
+rv.setUint32(13, 2, true);                       // bg
+rv.setUint16(17, 3, true);                       // attrs
+// 格 0：ch 'a'(0x61) width 1
+rv.setUint32(19, 0x61, true); run[23] = 1;
+// 格 1：ch '中'(0x4e2d) width 2
+rv.setUint32(24, 0x4e2d, true); run[28] = 2;
+// 格 2：ch 'b'(0x62) width 1
+rv.setUint32(29, 0x62, true); run[33] = 1;
+assert.deepEqual(decodeChanges(run), [
+  { t: 'cell', row: 2, col: 5, ch: 'a', width: 1, fg: 1, bg: 2, attrs: 3 },
+  { t: 'cell', row: 2, col: 6, ch: '中', width: 2, fg: 1, bg: 2, attrs: 3 },
+  { t: 'cell', row: 2, col: 7, ch: 'b', width: 1, fg: 1, bg: 2, attrs: 3 },
+]);
+
 // 2) 真实 Core.feed 往返：vim 流 → 二进制 → 解码，tags 与旧 JSON 一致。
 const core = new Core(VIM_COLS, VIM_ROWS);
 const decoded = decodeChanges(core.feed(vimStartupBytes()));
