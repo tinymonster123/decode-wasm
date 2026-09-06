@@ -4,3 +4,12 @@
 /dist
 js/pkg/
 js/pkg-node/
+
+# playwright
+.playwright-cli
+
+# mermaid
+mermaid.min.js
+
+# 文档
+docs
